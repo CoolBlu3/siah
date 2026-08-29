@@ -16,3 +16,6 @@ docs/participant_release_checklist.md
 tests/test_5core_builder.py
 tests/test_organizer_pipeline.py
 *.log
+agent_start.py
+sandbox.py
+test_agent.py

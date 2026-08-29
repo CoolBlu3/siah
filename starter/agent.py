@@ -31,6 +31,16 @@ def _terms(text: str) -> list[str]:
         if len(token) > 1 and token.lower() not in STOPWORDS
     ]
 
+def is_override_message(message: str) -> bool:
+    """Detects if user is overriding past preferences."""
+    lowered = message.lower()
+    return "ignore" in lowered or "earlier preference" in lowered
+
+def extract_override_value(message: str) -> str:
+    """Extracts the new requirement from an override message."""
+    if "what i need is:" in message.lower():
+        return message.split(":", 1)[-1].strip(" .")
+    return message
 
 class Agent:
     """Editable weak baseline: stateless BM25 retrieval with no LLM dependency."""
@@ -39,7 +49,12 @@ class Agent:
         self.catalog_path = Path(catalog_path)
         self.connection = sqlite3.connect(":memory:")
         self._sessions: set[str] = set()
+
+        # Create a storage for conversations and conversation history
+        self.history: dict[str, dict[str, str]] = {}
+        
         self._build_index()
+        
 
     def _build_index(self) -> None:
         cursor = self.connection.cursor()
@@ -74,6 +89,29 @@ class Agent:
         # The profile is anonymized and may be used for personalization.
         self._sessions.add(session_id)
 
+        self.history[session_id] = {
+            "category":[],
+            'material':[],
+            'color':[],
+            'size':[],
+            'style':[],
+            'brand':[],
+            'budget':[],
+            'feature':[],
+            'use_case':[],
+            # 'other':[],
+        }
+
+    def handle_override(self, session_id: str, user_message: str) -> None:
+        """Wipes old preferences while preserving the base category."""
+        category = self.history[session_id].get("category", [])
+        # Reset all slots
+        self.history[session_id] = {slot: [] for slot in self.history[session_id]}
+        # Restore category and append new requirement
+        self.history[session_id]["category"] = category
+        new_val = extract_override_value(user_message)
+        self.history[session_id]["feature"].append(new_val)
+
     def respond(
         self,
         session_id: str,
@@ -83,7 +121,19 @@ class Agent:
     ) -> dict:
         if session_id not in self._sessions:
             raise RuntimeError("reset must be called before respond")
+
+        self.update_history(session_id, user_message)
+        print(self.history[session_id])
+
         unique_terms = list(dict.fromkeys(_terms(user_message)))[:40]
+
+        if turn == 1:
+            match = re.search("^I'm looking for (.*?)[.,]", user_message)
+            category = match.group(1).strip()
+            self.history[session_id]['category'] = category
+        if is_override_message(user_message):
+            self.handle_override(session_id=session_id, user_message=user_message)
+
         expression = " OR ".join(f'"{term}"' for term in unique_terms)
         if not expression:
             recommendations: list[dict] = []
@@ -100,3 +150,43 @@ class Agent:
             "recommendations": recommendations,
             "usage": {"prompt_tokens": 0, "completion_tokens": 0},
         }
+
+
+    def update_history(
+      self,
+      session_id,
+      user_message      
+    ):
+        text = user_message.lower()
+        constraints = {}
+        
+        materials = [
+            "cotton", "polyester", "nylon", "leather",
+            "wool", "spandex", "silk", "rayon", "fabric"
+        ]
+
+        colors = [
+            "black", "white", "blue", "red", "pink",
+            "green", "brown", "gray", "grey", "purple",
+            "yellow", "orange"
+        ]
+
+        found_materials = [
+            x for x in materials if x in text
+        ]
+
+        found_colors = [
+            x for x in colors if x in text
+        ]
+
+        if found_materials:
+            constraints["material"] = found_materials
+
+        if found_colors:
+            constraints["color"] = found_colors
+
+        for slot, values in constraints.items():
+            self.history[session_id][slot].extend(values)
+
+        return constraints
+
