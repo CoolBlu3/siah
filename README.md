@@ -47,6 +47,18 @@ mv catalog.jsonl data/catalog.jsonl
 ```bash
 python3 -m evaluator.local_evaluator
 ```
+Results can be read from results.json
+
+## Limitations & Future Work
+### Current Limitations
+- Lexical Dependency: State tracking relies on token matching against a defined vocabulary; out-of-vocabulary synonyms or uncommon phrasing may bypass slot extraction.
+
+- Heuristic Question Scheduling: Clarification requests follow a fixed turn heuristic (turn <= 3) rather than an adaptive information-entropy model.
+
+### Improvements Given More Time
+- Introduce LLM usage to understand message and product details so as to handle semantics
+
+- Write a simple grid search script to test different BM25 column weight combinations (title, categories, features, description) across the validation set to find the exact ranking balance that produces the highest hit rate.
 
 ## Data Attribution & Compliance
 The catalog and validation sessions are derived from Amazon Reviews 2023 by McAuley Lab, UCSD. Developed strictly under the participant rules and evaluation protocol of the TechJam Conversational E-Commerce Search Challenge.
